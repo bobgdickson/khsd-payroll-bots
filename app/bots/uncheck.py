@@ -51,7 +51,7 @@ def ps_find(page, label_or_selector, timeout=5000):
 
     raise Exception(f"❌ Could not find '{label_or_selector}' using role or input name/id.")
 
-def ps_find_retry(page, label_or_selector, timeout=5000, retries=3, delay=1):
+def ps_find_retry(page, label_or_selector, timeout=2000, retries=2, delay=1):
     """
     Retry wrapper for ps_find in case frame is still refreshing or being detached.
     """
@@ -93,28 +93,34 @@ def process_payline_rows(page, emplid):
     frame = ps_target_frame(page)
 
     while True:
-        suffix = f"${row_index}"
-
         try:
-            hours_field = ps_find_retry(page, f"PAY_OTH_EARNS_OTH_HRS{suffix}")
-            ok_box = ps_find_retry(page, f"PAY_EARNINGS_OK_TO_PAY{suffix}")
+            hours_field = ps_find_retry(page, f"PAY_OTH_EARNS_OTH_HRS$0")
+            ok_box = ps_find_retry(page, f"PAY_EARNINGS_OK_TO_PAY$0")
+            job_box = ps_find_retry(page, f"PAY_EARNINGS_JOB_PAY$0")
             
             hours = hours_field.input_value().strip()
-            is_checked = ok_box.is_checked()
+            ok_is_checked = ok_box.is_checked()
+            job_is_checked = job_box.is_checked()
 
             # Convert to float if possible
             numeric_hours = float(hours) if hours else 0.0
 
-            print(f"{emplid} row {row_index}: Hours = '{hours}', OK to Pay = {is_checked}")
+            print(f"{emplid} row {row_index}: Hours = '{hours}', OK to Pay = {ok_is_checked}")
 
             # If no hours but OK to Pay is checked → uncheck it
-            if numeric_hours == 0 and is_checked:
+            if numeric_hours == 0 and ok_is_checked:
                 print(f"→ Unchecking OK to Pay for row {row_index}")
                 ok_box.uncheck()
                 # addchg_win0 gets triggered automatically via onchange/onblur in PS
                 save_needed = True
                 #page.pause()  # Pause to allow any async changes to complete
-
+            if numeric_hours == 0 and job_box.is_enabled() and job_is_checked:
+                if job_box.is_checked():
+                    print(f"→ Unchecking Job Pay box for row {row_index}")
+                    job_box.uncheck()
+                    save_needed = True
+            else:
+                print(f"⚠️ Job Pay box is disabled for row {row_index}, skipping.")
         except Exception as e:
             print(f"⚠️ Could not process row {row_index}: {e}")
             break  # No more rows likely
@@ -150,6 +156,8 @@ def process_payline_rows(page, emplid):
             print(f"❌ Failed to click Save: {e}")
 
 with sync_playwright() as p:
+    t0 = time.time()
+    print("Starting PeopleSoft uncheck bot...")
     browser = p.chromium.launch(headless=False)
     page = browser.new_page()
 
@@ -185,3 +193,7 @@ with sync_playwright() as p:
         process_search_results(page, emplid)
 
     browser.close()
+    t1 = time.time()
+    print(f"✅ Uncheck bot completed in {t1 - t0:.2f} seconds.")
+    print(f"Average time per EMPLID: {(t1 - t0) / len(EMPLIDS):.2f} seconds.")
+    print("All done! 🎉")
