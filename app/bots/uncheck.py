@@ -62,7 +62,7 @@ def process_payline_rows(page, emplid):
             numeric_hours = float(hours) if hours else 0.0
 
             print(f"{emplid} row {row_index}: Hours = '{hours}', OK to Pay = {ok_is_checked}")
-
+            #TODO: Add a check for Reg Salary input box and it is populated, set to zero
             # If no hours but OK to Pay is checked → uncheck it
             if numeric_hours == 0 and ok_is_checked:
                 print(f"→ Unchecking OK to Pay for row {row_index}")
